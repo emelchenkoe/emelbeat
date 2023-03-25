@@ -16,7 +16,7 @@
 	<main id="content">
 		<section id="container-fixed">
 			<div id="editor-container">
-				<textarea  id="editor-default" spellcheck="false">t*(t&16384?7:5)*(5-(3&t>>8))>>(3&-t>>(t&4096?2:16))|t>>(t&16384?t&4096?3:4:3)</textarea>
+				<textarea  id="editor-default" spellcheck="false">t*((t&4096?6:16)+(1&t>>14))>>(3&t>>8)|t>>(t&4096?3:4)</textarea>
 			</div>
 			<div class="controls">
 				<div class="controls-group controls-grow">
@@ -55,24 +55,24 @@
 					</button>
 				</div>
 				<select id="control-drawmode" class="control-select controls-grow" title="Drawing mode">
-					<option value="Points" selected>Points</option>
-					<option value="Waveform">Waveform</option>
+					<option value="Points" selected>points</option>
+					<option value="Waveform">waveform</option>
 				</select>
 				<select id="control-mode" class="control-select controls-grow" title="Sound mode">
-					<option value="Bytebeat" selected>Bytebeat</option>
-					<option value="Signed Bytebeat">Signed Bytebeat</option>
-					<option value="Floatbeat">Floatbeat</option>
+					<option value="Bytebeat" selected>bytebeat</option>
+					<option value="Signed Bytebeat">signed bytebeat</option>
+					<option value="Floatbeat">floatbeat</option>
 				</select>
 				<div class="controls-group controls-grow">
 					<input type="text" id="control-samplerate" title="Set sample rate (in Hz) then press Enter">
 					<select id="control-samplerate-select" class="control-select" title="Sample rate">
-						<option value="8000">8000Hz</option>
-						<option value="11025">11025Hz</option>
-						<option value="16000">16000Hz</option>
-						<option value="22050">22050Hz</option>
-						<option value="32000">32000Hz</option>
-						<option value="44100">44100Hz</option>
-						<option value="48000">48000Hz</option>
+						<option value="8000">8000hz</option>
+						<option value="11025">11025hz</option>
+						<option value="16000">16000hz</option>
+						<option value="22050">22050hz</option>
+						<option value="32000">32000hz</option>
+						<option value="44100">44100hz</option>
+						<option value="48000">48000hz</option>
 					</select>
 				</div>
 				<div class="controls-group">
@@ -166,6 +166,8 @@
 			<footer>
 				<a class="link" href="/btb/" title="Bytebeat discussion threads" target="_blank">&gt;&gt; Discussion threads</a><br>
 				<a class="link" href="https://github.com/SthephanShinkufag/bytebeat-composer" title="Github repo" target="_blank">&gt;&gt; Github</a>
+				
+				<a class="link" title="Forked by cokufaqikk" target="_blank">&gt;&gt; Forked by cokufaqikk</a><br>
 			</footer>
 		</section>
 	</main>
