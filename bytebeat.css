@@ -251,7 +251,7 @@ button[name="close"] {
 	border-radius: 3px;
 	background-image: linear-gradient(to bottom, #424242, #171b22);
 	color: #ced5e1;
-	font: var(--font-size)/var(--font-size) sans-serif;
+	font: var(--font-size)/var(--font-size) monospace;
 	white-space: nowrap;
 	cursor: pointer;
 }
