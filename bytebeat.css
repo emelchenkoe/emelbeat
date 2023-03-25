@@ -10,7 +10,7 @@ html {
 	color-scheme: dark;
 	background-color: #000;
 	color: #c5c8c6;
-	font: var(--font-size) sans-serif;
+	font: var(--font-size) monospace;
 }
 
 body {
@@ -368,7 +368,7 @@ button[name="close"] {
 	border-radius: var(--control-corners);
 	background-image: linear-gradient(to bottom, #959595, #242a37);
 	color: #e3e3e3;
-	font: bold var(--font-size)/var(--control-size) sans-serif;
+	font: bold var(--font-size)/var(--control-size) monospace;
 	cursor: pointer;
 }
 
@@ -587,3 +587,5 @@ button[name="close"] {
 		resize: none;
 	}
 }
+
+	  
