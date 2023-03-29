@@ -67,5 +67,13 @@
     "file": "morzecode.js",
     "fileOriginal": true,
     "starred": 1
+  },
+  {
+    "author": "Kehkeown_Uai",
+    "children": {
+      "url": "https://www.reddit.com/r/bytebeat/comments/124ksf6/x6b6xx_remix/",
+      "date": "2023-03-25",
+      "codeOriginal": "t*(t&-(t>>8)&t>>(t>>15)&t>>(t>>15))"
+    }
   }
 ]
