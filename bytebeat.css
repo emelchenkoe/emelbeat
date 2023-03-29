@@ -94,7 +94,7 @@ footer {
 	position: absolute;
 	top: 0;
 	bottom: 0;
-	border-left: 2px solid #7a9dc4;
+	border-left: 2px solid blue;
 	box-shadow: 0 0 8px #6ab2ff, 0 0 16px #fff;
 	left: 0;
 }
@@ -304,7 +304,7 @@ button[name="close"] {
 }
 
 .entry.star-yellow::before {
-	color: yellow;
+	color: aqua;
 }
 
 .entry-top {
@@ -327,7 +327,7 @@ button[name="close"] {
 .library-header {
 	padding: 4px 8px;
 	border-radius: 3px;
-	background-image: linear-gradient(to bottom, #202c46, #0b0d17);
+	background-image: linear-gradient(to bottom, #000000, #0b0d17);
 	cursor: pointer;
 }
 
@@ -589,3 +589,9 @@ button[name="close"] {
 }
 
 	  
+Footer
+© 2023 GitHub, Inc.
+Footer navigation
+Terms
+Privacy
+Security
