@@ -233,7 +233,7 @@ class audioProcessor extends AudioWorkletProcessor {
 					};
 					break;
 				case 'sinmode':
-					this.getValues = (funcValue) => ((Math.sin(funcValue) * PI / 128)) / 127.5 - 1;
+					this.getValues = (funcValue) => ((Math.sin(funcValue) * Math.PI / 128)) / 127.5 - 1;
 					this.getValuesVisualizer = (funcValue) => (((Math.sin(funcValue) * 128) & 255) + 127);
 					break;
 				case 'tanmode':
