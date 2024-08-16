@@ -284,17 +284,9 @@ class audioProcessor extends AudioWorkletProcessor {
 					this.getValues = (funcValue) => ((Math.sqrt(funcValue) * 32) & 255) / 127.5 - 1;
 					this.getValuesVisualizer = (funcValue) => ((Math.sqrt(funcValue) * 32) & 255);
 					break;
-				case 'sinfmode':
-					this.getValues = (funcValue) => ((Math.sin(funcValue) * 32)) / 128 / Math.PI;
-					this.getValuesVisualizer = (funcValue) => (((Math.sin(funcValue) * 128) & 255) + 127);
-					break;
-				case 'tanfmode':
-					this.getValues = (funcValue) => ((Math.tan(funcValue) * 32)) / (128 / Math.PI);
-					this.getValuesVisualizer = (funcValue) => (((Math.tan(funcValue) * 128) & 255) + 127);
-					break;
-				case 'cosfmode':
-					this.getValues = (funcValue) => ((Math.cos(funcValue) * 32)) / (128 / Math.PI);
-					this.getValuesVisualizer = (funcValue) => (((Math.cos(funcValue) * 128) & 255) + 127);
+				case 'sqrtmode':
+					this.getValues = (funcValue) => ((Math.PI(funcValue) * 32) & 255) / 127.5 - 1;
+					this.getValuesVisualizer = (funcValue) => ((Math.PI(funcValue) * 32) & 255);
 					break;
 
 				default: this.getValues = (_funcValue) => NaN;
