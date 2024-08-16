@@ -284,7 +284,7 @@ class audioProcessor extends AudioWorkletProcessor {
 					this.getValues = (funcValue) => ((Math.sqrt(funcValue) * 32) & 255) / 127.5 - 1;
 					this.getValuesVisualizer = (funcValue) => ((Math.sqrt(funcValue) * 32) & 255);
 					break;
-				case 'sqrtmode':
+				case 'pimode':
 					this.getValues = (funcValue) => ((Math.PI(funcValue) * 32) & 255) / 127.5 - 1;
 					this.getValuesVisualizer = (funcValue) => ((Math.PI(funcValue) * 32) & 255);
 					break;
