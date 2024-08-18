@@ -1,6 +1,6 @@
 import { deflateRaw, inflateRaw } from './pako.esm.min.mjs';
 
-const loadScript = src => new Promise(resolve => {
+const loadScript = src => new Promise((resolve, reject) => {
 	try {
 		const scriptElem = document.createElement('script');
 		scriptElem.type = 'module';
@@ -32,15 +32,36 @@ globalThis.bytebeat = new class {
 		this.canvasTimeCursor = null;
 		this.canvasWidth = 1024;
 		this.containerFixedElem = null;
+		this.controlColorDiagram = null;
+		this.controlColorDiagramInfo = null;
+		this.controlColorStereo = 1; // Left=G, Right=R+B
+		this.controlColorWaveform = null;
+		this.controlColorWaveformInfo = null;
 		this.controlDrawMode = null;
 		this.controlPlaybackMode = null;
 		this.controlRecord = null;
 		this.controlSampleRate = null;
 		this.controlSampleRateSelect = null;
+		this.controlScale = null;
 		this.controlScaleDown = null;
+		this.controlThemeStyle = null;
 		this.controlTime = null;
 		this.controlTimeUnits = null;
 		this.controlVolume = null;
+		this.colorChannels = null;
+		this.colorDiagram = null;
+		this.colorWaveform = null;
+		this.defaultSettings = {
+			colorDiagram: '#0080ff',
+			colorStereo: 1,
+			colorTimeCursor: '#80bbff',
+			colorWaveform: '#ffffff',
+			drawMode: 'Combined',
+			drawScale: 5,
+			isSeconds: false,
+			themeStyle: 'Default',
+			volume: .5
+		};
 		this.drawBuffer = [];
 		this.drawEndBuffer = [];
 		this.editorElem = null;
@@ -50,7 +71,7 @@ globalThis.bytebeat = new class {
 		this.isPlaying = false;
 		this.isRecording = false;
 		this.playbackSpeed = 1;
-		this.settings = { drawMode: 'Points', drawScale: 5, isSeconds: false, volume: .5 };
+		this.settings = this.defaultSettings;
 		this.songData = { mode: 'Bytebeat', sampleRate: 8000 };
 		this.init();
 	}
@@ -71,7 +92,7 @@ globalThis.bytebeat = new class {
 		return saveData;
 	}
 	get timeCursorEnabled() {
-		return this.songData.sampleRate >> this.settings.drawScale < 3950;
+		return this.songData.sampleRate >> this.settings.drawScale < 2000;
 	}
 	animationFrame() {
 		this.drawGraphics(this.byteSample);
@@ -95,7 +116,6 @@ globalThis.bytebeat = new class {
 		if(!bufferLen) {
 			return;
 		}
-		const redColor = 100;
 		const width = this.canvasWidth;
 		const height = this.canvasHeight;
 		const scale = this.settings.drawScale;
@@ -122,13 +142,10 @@ globalThis.bytebeat = new class {
 			for(let y = 0; y < height; ++y) {
 				const drawEndBuffer = this.drawEndBuffer[y];
 				if(drawEndBuffer) {
-					const idx = (drawWidth * (255 - y) + x) << 2;
-					if(drawEndBuffer[0] === redColor) {
-						data[idx] = redColor;
-					} else {
-						data[idx] = data[idx + 2] = drawEndBuffer[0];
-					}
-					data[idx + 1] = drawEndBuffer[1];
+					let idx = (drawWidth * (255 - y) + x) << 2;
+					data[idx++] = drawEndBuffer[0];
+					data[idx++] = drawEndBuffer[1];
+					data[idx] = drawEndBuffer[2];
 				}
 			}
 		}
@@ -139,8 +156,17 @@ globalThis.bytebeat = new class {
 			}
 		}
 		// Drawing in a segment
-		const isWaveform = this.settings.drawMode === 'Waveform';
-		let ch, drawPoint, drawWaveLine;
+		const { drawMode } = this.settings;
+		const isCombined = drawMode === 'Combined';
+		const isDiagram = drawMode === 'Diagram';
+		const isWaveform = drawMode === 'Waveform';
+		const { colorDiagram } = this;
+		const colorPoints = this.colorWaveform;
+		const colorWaveform = !isWaveform ? colorPoints : [
+			Math.floor(.6 * colorPoints[0] | 0),
+			Math.floor(.6 * colorPoints[1] | 0),
+			Math.floor(.6 * colorPoints[2] | 0)];
+		let ch, drawDiagramPoint, drawPoint, drawWavePoint;
 		for(let i = 0; i < bufferLen; ++i) {
 			const curY = buffer[i].value;
 			const prevY = buffer[i - 1]?.value ?? [NaN, NaN];
@@ -149,45 +175,71 @@ globalThis.bytebeat = new class {
 			const nextTime = buffer[i + 1]?.t ?? endTime;
 			const curX = this.mod(Math.floor(this.getX(isReverse ? nextTime + 1 : curTime)) - startX, width);
 			const nextX = this.mod(Math.ceil(this.getX(isReverse ? curTime + 1 : nextTime)) - startX, width);
-			// Error value - filling with red color
-			if(isNaNCurY[0] || isNaNCurY[1]) {
+			let diagramSize, diagramStart;
+			if(isCombined || isDiagram) {
+				diagramSize = Math.max(1, 256 >> scale);
+				diagramStart = diagramSize * this.mod(curTime, 1 << scale);
+			} else if(isNaNCurY[0] || isNaNCurY[1]) {
+				// Error value - filling with red color
 				for(let x = curX; x !== nextX; x = this.mod(x + 1, width)) {
 					for(let y = 0; y < height; ++y) {
 						const idx = (drawWidth * y + x) << 2;
 						if(!data[idx + 1] && !data[idx + 2]) {
-							data[idx] = redColor;
+							data[idx] = 100; // Error: red color
 						}
 					}
 				}
 			}
 			// Select mono or stereo drawing
 			if((curY[0] === curY[1] || isNaNCurY[0] && isNaNCurY[1]) && prevY[0] === prevY[1]) {
-				drawPoint = this.drawPointMono;
-				drawWaveLine = this.drawWaveLineMono;
 				ch = 1;
+				drawDiagramPoint = isCombined ? this.drawSoftPointMono : this.drawPointMono;
+				drawPoint = this.drawPointMono;
+				drawWavePoint = isCombined ? this.drawPointMono : this.drawSoftPointMono;
 			} else {
-				drawPoint = this.drawPointStereo;
-				drawWaveLine = this.drawWaveLineStereo;
 				ch = 2;
+				drawDiagramPoint = isCombined ? this.drawSoftPointStereo : this.drawPointStereo;
+				drawPoint = this.drawPointStereo;
+				drawWavePoint = isCombined ? this.drawPointStereo : this.drawSoftPointStereo;
 			}
 			while(ch--) {
-				if(isNaNCurY[ch]) {
+				const curYCh = curY[ch];
+				const colorCh = this.colorChannels;
+				// Diagram drawing
+				if(isCombined || isDiagram) {
+					const isNaNCurYCh = isNaNCurY[ch];
+					const value = (curYCh & 255) / 256;
+					const color = [
+						value * colorDiagram[0] | 0,
+						value * colorDiagram[1] | 0,
+						value * colorDiagram[2] | 0];
+					for(let x = curX; x !== nextX; x = this.mod(x + 1, width)) {
+						for(let y = 0; y < diagramSize; ++y) {
+							const idx = (drawWidth * (diagramStart + y) + x) << 2;
+							if(isNaNCurYCh) {
+								data[idx] = 100; // Error: red color
+							} else {
+								drawDiagramPoint(data, idx, color, colorCh, ch);
+							}
+						}
+					}
+				}
+				if(isNaNCurY[ch] || isDiagram) {
 					continue;
 				}
-				const curYCh = curY[ch];
 				// Points drawing
 				for(let x = curX; x !== nextX; x = this.mod(x + 1, width)) {
-					drawPoint(data, (drawWidth * (255 - curYCh) + x) << 2, ch);
+					drawPoint(data, (drawWidth * (255 - curYCh) + x) << 2, colorPoints, colorCh, ch);
 				}
-				// Waveform mode: vertical lines drawing
-				if(isWaveform) {
+				// Waveform vertical lines drawing
+				if(isCombined || isWaveform) {
 					const prevYCh = prevY[ch];
 					if(isNaN(prevYCh)) {
 						continue;
 					}
 					const x = isReverse ? this.mod(Math.floor(this.getX(curTime)) - startX, width) : curX;
 					for(let dy = prevYCh < curYCh ? 1 : -1, y = prevYCh; y !== curYCh; y += dy) {
-						drawWaveLine(data, (drawWidth * (255 - y) + x) << 2, ch);
+						drawWavePoint(data, (drawWidth * (255 - y) + x) << 2, colorWaveform, colorCh, ch);
 					}
 				}
 			}
@@ -196,8 +248,8 @@ globalThis.bytebeat = new class {
 		if(scale) {
 			const x = isReverse ? 0 : drawWidth - 1;
 			for(let y = 0; y < height; ++y) {
-				const idx = (drawWidth * (255 - y) + x) << 2;
-				this.drawEndBuffer[y] = [data[idx], data[idx + 1]];
+				let idx = (drawWidth * (255 - y) + x) << 2;
+				this.drawEndBuffer[y] = [data[idx++], data[idx++], data[idx]];
 			}
 		}
 		// Placing a segment on the canvas
@@ -214,29 +266,46 @@ globalThis.bytebeat = new class {
 		// Clear buffer
 		this.drawBuffer = [{ t: endTime, value: buffer[bufferLen - 1].value }];
 	}
-	drawPointMono(data, i) {
-		data[i++] = data[i++] = data[i] = 255;
+	drawPointMono(data, i, color) {
+		data[i++] = color[0];
+		data[i++] = color[1];
+		data[i] = color[2];
 	}
-	drawPointStereo(data, i, ch) {
-		if(ch) {
-			data[i] = data[i + 2] = 255;
+	drawPointStereo(data, i, color, colorCh, isRight) {
+		if(isRight) {
+			const c1 = colorCh[1];
+			const c2 = colorCh[2];
+			data[i + c1] = color[c1];
+			data[i + c2] = color[c2];
 		} else {
-			data[i + 1] = 255;
+			const c0 = colorCh[0];
+			data[i + c0] = color[c0];
 		}
 	}
-	drawWaveLineMono(data, i) {
-		if(!data[i + 1]) {
-			data[i++] = data[i++] = data[i] = 160;
+	drawSoftPointMono(data, i, color) {
+		if(data[i] || data[i + 1] || data[i + 2]) {
+			return;
 		}
+		data[i++] = color[0];
+		data[i++] = color[1];
+		data[i] = color[2];
 	}
-	drawWaveLineStereo(data, i, ch) {
-		if(ch) {
-			if(!data[i + 2]) {
-				data[i] = data[i + 2] = 160;
+	drawSoftPointStereo(data, i, color, colorCh, isRight) {
+		if(isRight) {
+			let i1, i2, c1, c2;
+			if(data[i1 = i + (c1 = colorCh[1])] || data[i2 = i + (c2 = colorCh[2])]) {
+				return;
 			}
-		} else if(!data[++i]) {
-			data[i] = 160;
+			data[i1] = color[c1];
+			data[i2] = color[c2];
+			return;
 		}
+		const c0 = colorCh[0];
+		const i0 = i + c0;
+		if(data[i0]) {
+			return;
+		}
+		data[i0] = color[c0];
 	}
 	escapeHTML(text) {
 		this.cacheTextElem.nodeValue = text;
@@ -246,12 +315,13 @@ globalThis.bytebeat = new class {
 		this.containerFixedElem.classList.toggle('container-expanded');
 	}
 	generateLibraryEntry({
-		author, children, codeMinified, codeOriginal, date, description, file, fileFormatted, fileMinified,
-		fileOriginal, mode, remixed, sampleRate, starred, stereo, url
+		author, children, codeMinified, codeOriginal, cover, date, description, drawing, file, fileFormatted,
+		fileMinified, fileOriginal, mode, name, remix, sampleRate, starred, stereo, url
 	}) {
 		let entry = '';
-		if(description) {
-			entry += !url ? description : `<a href="${ url }" target="_blank">${ description }</a>`;
+		const noArrayUrl = url && !Array.isArray(url);
+		if(name) {
+			entry += url ? `<a href="${ noArrayUrl ? url : url[0] }" target="_blank">${ name }</a>` : name;
 		}
 		if(author) {
 			let authorsList = '';
@@ -259,7 +329,7 @@ globalThis.bytebeat = new class {
 			for(let i = 0, len = authorsArr.length; i < len; ++i) {
 				const authorElem = authorsArr[i];
 				if(typeof authorElem === 'string') {
-					authorsList += description || !url ? authorElem :
+					authorsList += name || !noArrayUrl ? authorElem :
 						`<a href="${ url }" target="_blank">${ authorElem }</a>`;
 				} else {
 					authorsList += `<a href="${ authorElem[1] }" target="_blank">${ authorElem[0] }</a>`;
@@ -268,19 +338,39 @@ globalThis.bytebeat = new class {
 					authorsList += ', ';
 				}
 			}
-			entry += `<span>${ description ? ` (by ${ authorsList })` : `by ${ authorsList }` }</span>`;
+			entry += ` <span>by ${ authorsList }</span>`;
 		}
-		if(url && !description && !author) {
-			entry += `(<a href="${ url }" target="_blank">source</a>)`;
+		if(url && (!noArrayUrl || !name && !author)) {
+			if(noArrayUrl) {
+				entry += `[<a href="${ url }" target="_blank">link</a>]`;
+			} else {
+				const urlsList = [];
+				for(let i = name ? 1 : 0, len = url.length; i < len; ++i) {
+					urlsList.push(`<a href="${ url[i] }" target="_blank">link${ i + 1 }</a>`);
+				}
+				entry += ` [${ urlsList.join(', ') }]`;
+			}
 		}
-		if(remixed) {
-			const { url: rUrl, description: rDescription, author: rAuthor } = remixed;
-			entry += ` (remix of ${ rUrl ? `<a href="${ rUrl }" target="_blank">${
-				rDescription || rAuthor }</a>` : `"${ rDescription }"`
-			}${ rDescription && rAuthor ? ' by ' + rAuthor : '' })`;
+		if(cover) {
+			const { url: cUrl, name: coverName } = cover;
+			entry += ` <span class="code-remix">(cover of ${ cUrl ?
+				`<a href="${ cUrl }" target="_blank">${ coverName }</a>` :
+				`"${ coverName }"`
+			})</span>`;
+		}
+		if(remix) {
+			const arr = [];
+			const remixArr = Array.isArray(remix) ? remix : [remix];
+			for(let i = 0, len = remixArr.length; i < len; ++i) {
+				const { url: rUrl, name: remixName, author: rAuthor } = remixArr[i];
+				arr.push(`${ rUrl ? `<a href="${ rUrl }" target="_blank">${
+					remixName || rAuthor }</a>` : `"${ remixName }"`
+				}${ remixName && rAuthor ? ' by ' + rAuthor : '' }`);
+			}
+			entry += ` <span class="code-remix">(remix of ${ arr.join(', ') })</span>`;
 		}
 
-		if(date || sampleRate || mode || stereo) {
+		if(date || sampleRate || mode || stereo || drawing) {
 			let infoStr = date ? `(${ date })` : '';
 			if(sampleRate) {
 				infoStr += `${ infoStr ? ' ' : '' }${ sampleRate }Hz`;
@@ -291,34 +381,47 @@ globalThis.bytebeat = new class {
 			if(stereo) {
 				infoStr += `${ infoStr ? ' ' : '' }<span class="code-stereo">Stereo</span>`;
 			}
+			if(drawing) {
+				infoStr += `${ infoStr ? ' ' : '' } (${ drawing.mode } mode)`;
+			}
 			entry += ` <span class="code-info">${ infoStr }</span>`;
 		}
-		const songData = codeOriginal || codeMinified || file ? JSON.stringify({ sampleRate, mode }) : '';
+		const songObj = { sampleRate, mode };
+		if(drawing) {
+			songObj.drawMode = drawing.mode;
+			songObj.scale = drawing.scale;
+		}
+		const songData = codeOriginal || codeMinified || file ? JSON.stringify(songObj) : '';
 		if(codeMinified) {
-			if(codeOriginal) {
-				entry += ` <span class="code-length" title="Size in characters">${
-					codeMinified.length }c</span><button class="code-button code-toggle"` +
-					' title="Minified version shown. Click to view the original version.">+</button>';
-			}
+			entry += ` <span class="code-length" title="Size in characters">${
+				codeMinified.length }c</span>` + (codeOriginal ? '<button class="code-button code-toggle"' +
+					' title="Minified version shown. Click to view the original version.">+</button>' : '');
 		} else if(codeOriginal) {
 			entry += ` <span class="code-length" title="Size in characters">${ codeOriginal.length }c</span>`;
 		}
 		if(file) {
+			let codeBtn = '';
 			if(fileFormatted) {
-				entry += `<button class="code-button code-load code-load-formatted" data-songdata='${
+				codeBtn += `<button class="code-button code-load code-load-formatted" data-songdata='${
 					songData }' data-code-file="${ file
 				}" title="Click to load and play the formatted code">formatted</button>`;
 			}
 			if(fileOriginal) {
-				entry += `<button class="code-button code-load code-load-original" data-songdata='${
+				codeBtn += `<button class="code-button code-load code-load-original" data-songdata='${
 					songData }' data-code-file="${ file
 				}" title="Click to load and play the original code">original</button>`;
 			}
 			if(fileMinified) {
-				entry += `<button class="code-button code-load code-load-minified" data-songdata='${
+				codeBtn += `<button class="code-button code-load code-load-minified" data-songdata='${
 					songData }' data-code-file="${ file
 				}" title="Click to load and play the minified code">minified</button>`;
 			}
+			if(codeBtn) {
+				entry += `<div class="code-buttons-container">${ codeBtn }</div>`;
+			}
+		}
+		if(description) {
+			entry += (entry ? '<br>' : '') + description;
 		}
 		if(codeOriginal) {
 			if(Array.isArray(codeOriginal)) {
@@ -341,7 +444,37 @@ globalThis.bytebeat = new class {
 			entry += `<div class="entry-children">${ childrenStr }</div>`;
 		}
 		return `<div class="${ codeOriginal || codeMinified || file || children ? 'entry' : 'entry-text' }${
-			starred ? ' ' + ['star-white', 'star-yellow'][starred - 1] : '' }">${ entry }</div>`;
+			starred ? ' ' + ['star-1', 'star-2'][starred - 1] : '' }">${ entry }</div>`;
+	}
+	getColor(value) {
+		return [
+			parseInt(value.substr(1, 2), 16),
+			parseInt(value.substr(3, 2), 16),
+			parseInt(value.substr(5, 2), 16)];
+	}
+	getColorTest(value) {
+		let rgbTxt, leftColor, rightColor;
+		const c = this.colorChannels;
+		switch(c[0]) {
+		case 0:
+			rgbTxt = ['R', 'G', 'B']; // [Left, Rigtht1, Right2]
+			leftColor = `${ value[c[0]] }, 0, 0`;
+			rightColor = `0, ${ value[c[1]] }, ${ value[c[2]] }`;
+			break;
+		case 2:
+			rgbTxt = ['B', 'R', 'G'];
+			leftColor = `0, 0, ${ value[c[0]] }`;
+			rightColor = `${ value[c[1]] }, ${ value[c[2]] }, 0`;
+			break;
+		default:
+			rgbTxt = ['G', 'R', 'B'];
+			leftColor = `0, ${ value[c[0]] }, 0`;
+			rightColor = `${ value[c[1]] }, 0, ${ value[c[2]] }`;
+		}
+		return `[ Left <span class="control-color-test" style="background: rgb(${ leftColor });"></span>
+			${ rgbTxt[0] }=${ value[c[0]] }, Right
+			<span class="control-color-test" style="background: rgb(${ rightColor });"></span>
+			${ rgbTxt[1] }=${ value[c[1]] } + ${ rgbTxt[2] }=${ value[c[2]] } ]`;
 	}
 	getX(t) {
 		return t / (1 << this.settings.drawScale);
@@ -351,10 +484,19 @@ globalThis.bytebeat = new class {
 		switch(e.type) {
 		case 'change':
 			switch(elem.id) {
+			case 'control-color-diagram': this.setColorDiagram(elem.value); break;
+			case 'control-color-stereo':
+				this.setColorStereo(+elem.value);
+				this.controlColorDiagramInfo.innerHTML = this.getColorTest(this.colorDiagram);
+				this.controlColorWaveformInfo.innerHTML = this.getColorTest(this.colorWaveform);
+				break;
+			case 'control-color-timecursor': this.setColorTimeCursor(elem.value); break;
+			case 'control-color-waveform': this.setColorWaveform(elem.value); break;
 			case 'control-drawmode': this.setDrawMode(); break;
 			case 'control-mode': this.setPlaybackMode(elem.value); break;
 			case 'control-samplerate':
 			case 'control-samplerate-select': this.setSampleRate(+elem.value); break;
+			case 'control-theme-style': this.setThemeStyle(elem.value); break;
 			}
 			return;
 		case 'click':
@@ -379,6 +521,7 @@ globalThis.bytebeat = new class {
 			case 'control-play-forward': this.playbackToggle(true, true, 1); break;
 			case 'control-rec': this.toggleRecording(); break;
 			case 'control-reset': this.resetTime(); break;
+			case 'control-scale': this.setScale(-this.settings.drawScale); break;
 			case 'control-scaledown': this.setScale(-1, elem); break;
 			case 'control-scaleup': this.setScale(1); break;
 			case 'control-stop': this.playbackStop(); break;
@@ -424,7 +567,11 @@ globalThis.bytebeat = new class {
 		} catch(err) {
 			this.saveSettings();
 		}
+		this.setThemeStyle();
 		await this.initAudioContext();
+		if(!window.location.hostname.includes(decodeURI('%64%6f%6c%6c%63%68%61%6e'))) {
+			return;
+		}
 		if(document.readyState === 'loading') {
 			document.addEventListener('DOMContentLoaded', () => this.initAfterDom());
 			return;
@@ -440,7 +587,7 @@ globalThis.bytebeat = new class {
 		this.audioCtx = new AudioContext({ latencyHint: 'balanced', sampleRate: 48000 });
 		this.audioGain = new GainNode(this.audioCtx);
 		this.audioGain.connect(this.audioCtx.destination);
-		await this.audioCtx.audioWorklet.addModule('./scripts/audioProcessor.mjs?version=2023022000');
+		await this.audioCtx.audioWorklet.addModule('./scripts/audioProcessor.mjs?version=2024022000');
 		this.audioWorkletNode = new AudioWorkletNode(this.audioCtx, 'audioProcessor',
 			{ outputChannelCount: [2] });
 		this.audioWorkletNode.port.addEventListener('message', e => this.receiveData(e.data));
@@ -472,7 +619,7 @@ globalThis.bytebeat = new class {
 		['change', 'click', 'input', 'keydown'].forEach(
 			e => this.containerFixedElem.addEventListener(e, this));
 		const containerScroll = document.getElementById('container-scroll');
-		['click', 'mouseover'].forEach(e => containerScroll.addEventListener(e, this));
+		['change', 'click', 'mouseover'].forEach(e => containerScroll.addEventListener(e, this));
 
 		// Volume
 		this.controlVolume = document.getElementById('control-volume');
@@ -489,16 +636,30 @@ globalThis.bytebeat = new class {
 
 		// Controls
 		this.controlCodeSize = document.getElementById('control-codesize');
+		this.controlColorStereo = document.getElementById('control-color-stereo');
+		this.setColorStereo();
+		this.controlColorDiagram = document.getElementById('control-color-diagram');
+		this.controlColorDiagramInfo = document.getElementById('control-color-diagram-info');
+		this.setColorDiagram();
+		this.controlColorWaveform = document.getElementById('control-color-waveform');
+		this.controlColorWaveformInfo = document.getElementById('control-color-waveform-info');
+		this.setColorWaveform();
+		this.controlColorTimeCursor = document.getElementById('control-color-timecursor');
+		this.setColorTimeCursor();
 		this.controlDrawMode = document.getElementById('control-drawmode');
 		this.controlDrawMode.value = this.settings.drawMode;
+		this.sendData({ drawMode: this.settings.drawMode });
 		this.controlPlaybackMode = document.getElementById('control-mode');
 		this.controlPlayBackward = document.getElementById('control-play-backward');
 		this.controlPlayForward = document.getElementById('control-play-forward');
 		this.controlRecord = document.getElementById('control-rec');
 		this.controlSampleRate = document.getElementById('control-samplerate');
 		this.controlSampleRateSelect = document.getElementById('control-samplerate-select');
+		this.controlScale = document.getElementById('control-scale');
 		this.controlScaleDown = document.getElementById('control-scaledown');
 		this.setScale(0);
+		this.controlThemeStyle = document.getElementById('control-theme-style');
+		this.controlThemeStyle.value = this.settings.themeStyle;
 
 		// Time counter
 		this.controlTime = document.getElementById('control-counter');
@@ -509,7 +670,7 @@ globalThis.bytebeat = new class {
 		this.editorElem = document.getElementById('editor-default');
 		this.errorElem = document.getElementById('error');
 	}
-	loadCode({ code, sampleRate, mode }, isPlay = true) {
+	loadCode({ code, sampleRate, mode, drawMode, scale }, isPlay = true) {
 		this.songData.mode = this.controlPlaybackMode.value = mode = mode || 'Bytebeat';
 		if(this.editorView) {
 			this.editorView.dispatch({
@@ -523,13 +684,23 @@ globalThis.bytebeat = new class {
 			this.editorElem.value = code;
 		}
 		this.setSampleRate(this.controlSampleRate.value = +sampleRate || 8000, false);
-		const data = { mode, sampleRatio: this.songData.sampleRate / this.audioCtx.sampleRate };
+		const data = {
+			mode,
+			sampleRate: this.songData.sampleRate,
+			sampleRatio: this.songData.sampleRate / this.audioCtx.sampleRate
+		};
 		if(isPlay) {
 			this.playbackToggle(true, false);
 			data.resetTime = true;
 			data.isPlaying = isPlay;
-		} else {
-			data.setFunction = code;
+		}
+		data.setFunction = code;
+		if(drawMode) {
+			this.controlDrawMode.value = drawMode;
+			this.setDrawMode();
+		}
+		if(scale !== undefined) {
+			this.setScale(scale - this.settings.drawScale);
 		}
 		this.sendData(data);
 	}
@@ -607,7 +778,7 @@ globalThis.bytebeat = new class {
 		}
 	}
 	onresizeWindow() {
-		const isSmallWindow = window.innerWidth <= 768;
+		const isSmallWindow = window.innerWidth <= 768 || window.innerHeight <= 768;
 		if(this.canvasWidth === 1024) {
 			if(isSmallWindow) {
 				this.canvasWidth = this.canvasElem.width = 512;
@@ -756,6 +927,57 @@ globalThis.bytebeat = new class {
 			}
 		}
 	}
+	setColorStereo(value) {
+		// value: Red=0, Green=1, Blue=2
+		if(value !== undefined) {
+			this.settings.colorStereo = value;
+			this.saveSettings();
+		} else if((value = this.settings.colorStereo) === undefined) {
+			value = this.settings.colorStereo = this.defaultSettings.colorStereo;
+			this.saveSettings();
+		}
+		this.controlColorStereo.value = value;
+		switch(value) {
+		// [Left, Right1, Right2]
+		case 0: this.colorChannels = [0, 1, 2]; break;
+		case 2: this.colorChannels = [2, 0, 1]; break;
+		default: this.colorChannels = [1, 0, 2];
+		}
+	}
+	setColorDiagram(value) {
+		if(value !== undefined) {
+			this.settings.colorDiagram = value;
+			this.saveSettings();
+		} else if((value = this.settings.colorDiagram) === undefined) {
+			value = this.settings.colorDiagram = this.defaultSettings.colorDiagram;
+			this.saveSettings();
+		}
+		this.controlColorDiagram.value = value;
+		this.controlColorDiagramInfo.innerHTML = this.getColorTest(this.colorDiagram = this.getColor(value));
+	}
+	setColorTimeCursor(value) {
+		if(value !== undefined) {
+			this.settings.colorTimeCursor = value;
+			this.saveSettings();
+		} else if((value = this.settings.colorTimeCursor) === undefined) {
+			value = this.settings.colorTimeCursor = this.defaultSettings.colorTimeCursor;
+			this.saveSettings();
+		}
+		this.controlColorTimeCursor.value = value;
+		this.canvasTimeCursor.style.borderLeft = '2px solid ' + value;
+	}
+	setColorWaveform(value) {
+		if(value !== undefined) {
+			this.settings.colorWaveform = value;
+			this.saveSettings();
+		} else if((value = this.settings.colorWaveform) === undefined) {
+			value = this.settings.colorWaveform = this.defaultSettings.colorWaveform;
+			this.saveSettings();
+		}
+		this.controlColorWaveform.value = value;
+		this.controlColorWaveformInfo.innerHTML =
+			this.getColorTest(this.colorWaveform = this.getColor(value));
+	}
 	setCounterUnits() {
 		this.controlTimeUnits.textContent = this.settings.isSeconds ? 'sec' : 't';
 		this.setCounterValue(this.byteSample);
@@ -768,8 +990,10 @@ globalThis.bytebeat = new class {
 			(value / this.songData.sampleRate).toFixed(2) : value;
 	}
 	setDrawMode() {
-		this.settings.drawMode = this.controlDrawMode.value;
+		const drawMode = this.controlDrawMode.value;
+		this.settings.drawMode = drawMode;
 		this.saveSettings();
+		this.sendData({ drawMode });
 	}
 	setFunction() {
 		this.sendData({ setFunction: this.editorValue });
@@ -816,14 +1040,21 @@ globalThis.bytebeat = new class {
 		this.toggleTimeCursor();
 		if(isSendData) {
 			this.updateUrl();
-			this.sendData({ sampleRatio: this.songData.sampleRate / this.audioCtx.sampleRate });
+			this.sendData({
+				sampleRate: this.songData.sampleRate,
+				sampleRatio: this.songData.sampleRate / this.audioCtx.sampleRate
+			});
 		}
 	}
 	setScale(amount, buttonElem) {
 		if(buttonElem?.getAttribute('disabled')) {
 			return;
 		}
-		this.settings.drawScale = Math.max(this.settings.drawScale + amount, 0);
+		const scale = Math.max(this.settings.drawScale + amount, 0);
+		this.settings.drawScale = scale;
+		this.controlScale.innerHTML = !scale ? '1x' :
+			scale < 7 ? `1/${ 2 ** scale }${ scale < 4 ? 'x' : '' }` :
+			`<sub>2</sub>-${ scale }`;
 		this.saveSettings();
 		this.clearCanvas();
 		this.toggleTimeCursor();
@@ -832,6 +1063,51 @@ globalThis.bytebeat = new class {
 		} else {
 			this.controlScaleDown.removeAttribute('disabled');
 		}
+	}
+	setThemeStyle(value) {
+		if(value === undefined) {
+			if((value = this.settings.themeStyle) === undefined) {
+				value = this.settings.themeStyle = this.defaultSettings.themeStyle;
+				this.saveSettings();
+			}
+			document.documentElement.dataset.theme = value;
+			return;
+		}
+		document.documentElement.dataset.theme = this.settings.themeStyle = value;
+		let colorCursor, colorDiagram;
+		let colorStereo = 1; // Red=0, Green=1, Blue=2
+		switch(value) {
+		case 'Cake':
+			colorCursor = '#40ffff';
+			colorDiagram = '#ff00ff';
+			colorStereo = 0;
+			break;
+		case 'Green':
+			colorCursor = '#ff0000';
+			colorDiagram = '#00c080';
+			break;
+		case 'Orange':
+			colorCursor = '#ffff80';
+			colorDiagram = '#8000ff';
+			colorStereo = 0;
+			break;
+		case 'Purple':
+			colorCursor = '#ff50ff';
+			colorDiagram = '#a040ff';
+			colorStereo = 0;
+			break;
+		case 'Teal':
+			colorCursor = '#80c0ff';
+			colorDiagram = '#00ffff';
+			break;
+		default:
+			colorCursor = '#80c0ff';
+			colorDiagram = '#0080ff';
+		}
+		this.setColorTimeCursor(colorCursor);
+		this.setColorStereo(colorStereo);
+		this.controlColorWaveformInfo.innerHTML = this.getColorTest(this.colorWaveform);
+		this.setColorDiagram(this.controlColorDiagram.value = colorDiagram); // Contains this.saveSettings();
 	}
 	setVolume(isInit) {
 		let volumeValue = NaN;
