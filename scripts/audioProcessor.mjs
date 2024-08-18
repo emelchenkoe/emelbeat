@@ -279,13 +279,6 @@ case 'Bytebeat':
 					this.getValues = (funcValue) => ((Math.cos(funcValue * Math.PI / 128) * 32)) / 127.5 - 1;
 					this.getValuesVisualizer = (funcValue) => (((Math.cos(funcValue / (128 / Math.PI) + 0.01) * 128) & 255) + 127);
 					break;
-				case 'Funcbeat':
-					this.getValues = (funcValue, ch) => {
-						const outValue = Math.max(Math.min(funcValue, 1), -1);
-						this.lastByteValue[ch] = Math.round((outValue + 1) * 127.5);
-						return outValue;
-					};
-					break;
 
 			default: this.getValues = (funcValue, ch) => (this.lastByteValue[ch] = NaN);
 			}
