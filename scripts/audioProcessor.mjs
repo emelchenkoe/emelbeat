@@ -296,6 +296,14 @@ class audioProcessor extends AudioWorkletProcessor {
 					this.getValues = (funcValue) => ((Math.cos(funcValue * Math.PI / 128) * 32)) / 127.5 - 1;
 					this.getValuesVisualizer = (funcValue) => (((Math.cos(funcValue / (128 / Math.PI) + 0.01) * 128) & 255) + 127);
 					break;
+				case 'sinmodeold':
+					this.getValues = (funcValue) => ((Math.sin(funcValue) * 32) & 255) / 127.5 - 1;
+					this.getValuesVisualizer = (funcValue) => ((Math.sin(funcValue) * 32) & 255);
+					break;
+				case 'cosmodeold':
+					this.getValues = (funcValue) => ((Math.cos(funcValue) * 32) & 255) / 127.5 - 1;
+					this.getValuesVisualizer = (funcValue) => ((Math.cos(funcValue) * 32) & 255);
+					break;
 
 				default: this.getValues = (_funcValue) => NaN;
 					this.getValues = (_funcValue) => 0;
