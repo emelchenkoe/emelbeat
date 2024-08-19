@@ -44,6 +44,16 @@ option {
 	height: 100%;
 }
 
+div#disabled-msg {
+	position: absolute;
+	top: 33%;
+	left: 33%;
+	background-color: #0000FF;
+	color: black;
+	padding-left: 32px;
+	padding-right: 32px;
+}
+
 .container-expanded + #container-scroll {
 	display: none;
 }
